@@ -82,9 +82,17 @@ class SIPCodeAnalyzer:
             worksheet.column_dimensions[get_column_letter(col_num + 1)].width = max(12, min(30, len(str(value)) + 2))
 
         # Format data cells and apply conditional formatting
+        status_col_index = None
+        if 'Status' in df.columns:
+            status_col_index = df.columns.get_loc('Status') + 1
+
         for row_num in range(2, worksheet.max_row + 1):
-            status = worksheet.cell(row=row_num, column=df.columns.get_loc('Status') + 1).value
-            fill_color = CallStatus.get_status_color(status)
+            # Default color is white if no status column exists
+            fill_color = "FFFFFF"
+            
+            if status_col_index is not None:
+                status = worksheet.cell(row=row_num, column=status_col_index).value
+                fill_color = CallStatus.get_status_color(status)
             
             for col_num in range(1, worksheet.max_column + 1):
                 cell = worksheet.cell(row=row_num, column=col_num)
@@ -92,8 +100,9 @@ class SIPCodeAnalyzer:
                 cell.border = border
                 cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
 
-        # Add table style
-        tab = Table(displayName=f"Table_{sheet_name}", ref=worksheet.dimensions)
+        # Add table style - Replace spaces with underscores in table name
+        table_name = f"Table_{sheet_name.replace(' ', '_')}"
+        tab = Table(displayName=table_name, ref=worksheet.dimensions)
         style = TableStyleInfo(
             name="TableStyleMedium9",
             showFirstColumn=False,
@@ -180,7 +189,7 @@ class SIPCodeAnalyzer:
 
     def load_explanations(self) -> None:
         """Load all SIP code explanations and related data."""
-        # Keep your existing explanations dictionary and add new ones
+        # First, load the SIP explanations
         self.sip_explanations = {
             # 1xx Provisional Responses
             100: "Call is being processed. Please wait.",
@@ -242,6 +251,35 @@ class SIPCodeAnalyzer:
             603: "Call explicitly rejected.",
             604: "User does not exist.",
             606: "Call settings prevent connection."
+        }
+
+        # Then, load the Microsoft subcode explanations
+        self.microsoft_subcode_explanations = {
+            560486: {
+                "description": "Network busy or user unavailable",
+                "cause": "The destination user agent or network is temporarily unavailable",
+                "resolution": "Retry the call after a brief delay. If persistent, check network conditions."
+            },
+            560487: {
+                "description": "Call cancelled or network timeout",
+                "cause": "The call was terminated due to timeout or user cancellation",
+                "resolution": "Check network latency and connection stability."
+            },
+            560404: {
+                "description": "User or number not found",
+                "cause": "The dialed number is invalid or user does not exist",
+                "resolution": "Verify the phone number and user existence in the system."
+            },
+            560480: {
+                "description": "Temporary service interruption",
+                "cause": "Service is temporarily unavailable",
+                "resolution": "Wait for service restoration and retry. Check service status."
+            },
+            560503: {
+                "description": "Service currently unavailable",
+                "cause": "System overload or maintenance",
+                "resolution": "Wait for service restoration. If persistent, contact support."
+            }
         }
 
     microsoft_subcode_explanations = {
@@ -317,37 +355,62 @@ class SIPCodeAnalyzer:
     }
 
 
-        # Enhanced Microsoft subcode explanations
-        self.microsoft_subcode_explanations = {
-            560486: {
-                "description": "Network busy or user unavailable",
-                "cause": "The destination user agent or network is temporarily unavailable",
-                "resolution": "Retry the call after a brief delay. If persistent, check network conditions."
-            },
-            560487: {
-                "description": "Call cancelled or network timeout",
-                "cause": "The call was terminated due to timeout or user cancellation",
-                "resolution": "Check network latency and connection stability."
-            },
-            560404: {
-                "description": "User or number not found",
-                "cause": "The dialed number is invalid or user does not exist",
-                "resolution": "Verify the phone number and user existence in the system."
-            },
-            560480: {
-                "description": "Temporary service interruption",
-                "cause": "Service is temporarily unavailable",
-                "resolution": "Wait for service restoration and retry. Check service status."
-            },
-            560503: {
-                "description": "Service currently unavailable",
-                "cause": "System overload or maintenance",
-                "resolution": "Wait for service restoration. If persistent, contact support."
-            }
+    # Enhanced Microsoft subcode explanations
+    microsoft_subcode_explanations = {
+        560486: {
+            "description": "Network busy or user unavailable",
+            "cause": "The destination user agent or network is temporarily unavailable",
+            "resolution": "Retry the call after a brief delay. If persistent, check network conditions."
+        },
+        560487: {
+            "description": "Call cancelled or network timeout",
+            "cause": "The call was terminated due to timeout or user cancellation",
+            "resolution": "Check network latency and connection stability."
+        },
+        560404: {
+            "description": "User or number not found",
+            "cause": "The dialed number is invalid or user does not exist",
+            "resolution": "Verify the phone number and user existence in the system."
+        },
+        560480: {
+            "description": "Temporary service interruption",
+            "cause": "Service is temporarily unavailable",
+            "resolution": "Wait for service restoration and retry. Check service status."
+        },
+        560503: {
+            "description": "Service currently unavailable",
+            "cause": "System overload or maintenance",
+            "resolution": "Wait for service restoration. If persistent, contact support."
         }
+    }
 
-
-    
+    def explain_sip(self, sip_code: int, microsoft_subcode: int, sip_phrase: str) -> Tuple[str, str, Dict]:
+        """
+        Explain a SIP code with its Microsoft subcode and phrase.
+        Returns: (simple_explanation, detailed_explanation, diagnostic_info)
+        """
+        # Get simple explanation
+        simple_exp = self.sip_explanations.get(sip_code, "Unknown SIP code")
+        
+        # Get detailed explanation
+        detailed_exp = self.detailed_explanations.get(sip_code, "No detailed explanation available")
+        
+        # Get Microsoft subcode information
+        subcode_info = self.microsoft_subcode_explanations.get(microsoft_subcode, {
+            "description": "Unknown subcode",
+            "cause": "No information available",
+            "resolution": "Contact support for more information"
+        })
+        
+        # Create diagnostic dictionary
+        diagnostic = {
+            "Technical_Details": f"SIP {sip_code} - {sip_phrase}",
+            "Microsoft_Subcode": f"{microsoft_subcode} - {subcode_info['description']}",
+            "Cause": subcode_info['cause'],
+            "Resolution": subcode_info['resolution']
+        }
+        
+        return simple_exp, detailed_exp, diagnostic
 
 class ImprovedGUI:
     def __init__(self):
@@ -438,7 +501,45 @@ For more information, please contact support.
         help_tab.columnconfigure(0, weight=1)
         help_tab.rowconfigure(0, weight=1)
 
-    # [Rest of the GUI methods remain the same...]
+    def browse_input_file(self):
+        """Open a file dialog to select an input file."""
+        filename = filedialog.askopenfilename(
+            title="Select input file",
+            filetypes=(("Excel files", "*.xlsx *.xls"), ("All files", "*.*"))
+        )
+        if filename:
+            self.input_path_var.set(filename)
+
+    def browse_output_file(self):
+        """Open a file dialog to select an output file location."""
+        filename = filedialog.asksaveasfilename(
+            title="Save output file",
+            filetypes=(("Excel files", "*.xlsx"), ("All files", "*.*")),
+            defaultextension=".xlsx"
+        )
+        if filename:
+            self.output_path_var.set(filename)
+
+    def process_and_generate(self):
+        """Process the input file and generate the output file."""
+        input_path = self.input_path_var.get()
+        output_path = self.output_path_var.get()
+        
+        if not input_path or not output_path:
+            messagebox.showerror("Error", "Please select both input and output files.")
+            return
+            
+        self.progress_bar.start()
+        self.progress_var.set("Processing...")
+        
+        success, message = self.analyzer.process_file(input_path, output_path)
+        
+        self.progress_bar.stop()
+        if success:
+            messagebox.showinfo("Success", message)
+        else:
+            messagebox.showerror("Error", message)
+        self.progress_var.set("Ready to process...")
 
 def main():
     app = ImprovedGUI()
