@@ -1,3 +1,5 @@
+# TeasmLogsV3.py - Version 3.0 - 2024-11-22 - Abdelhay Affoun 
+
 import pandas as pd
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
