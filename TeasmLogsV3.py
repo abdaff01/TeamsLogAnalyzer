@@ -124,7 +124,18 @@ class SIPCodeAnalyzer:
             # Process each call and add status
             results = []
             summaries = []
+            
+            # Initialize counters for different call types
+            total_attempted_calls = 0  # Calls with duration > 0
+            successful_calls = 0
+            failed_calls = 0
+            warning_calls = 0
+            info_calls = 0
+
             for _, row in data.iterrows():
+                duration = row.get('Duration (seconds)', 0)  # Updated column name
+                
+                # Process call status and explanations
                 simple_exp, detailed_exp, diagnostic = self.explain_sip(
                     int(row['Final SIP code']),
                     int(row['Final Microsoft subcode']),
@@ -133,10 +144,23 @@ class SIPCodeAnalyzer:
                 
                 status = self.determine_call_status(row['Final SIP code'])
                 
+                # Count calls based on duration and status
+                if duration > 0:
+                    total_attempted_calls += 1
+                    if status == CallStatus.SUCCESS:
+                        successful_calls += 1
+                    elif status == CallStatus.FAILED:
+                        failed_calls += 1
+                    elif status == CallStatus.WARNING:
+                        warning_calls += 1
+                    elif status == CallStatus.INFO:
+                        info_calls += 1
+
                 result = {
                     'Status': status,
                     'Simple_Explanation': simple_exp,
                     'Detailed_Explanation': detailed_exp,
+                    'Duration': duration,
                     **diagnostic
                 }
                 results.append(result)
@@ -145,6 +169,7 @@ class SIPCodeAnalyzer:
                     'Date': row.get('Start time', 'Unknown'),
                     'User': row.get('Display Name', 'Unknown'),
                     'Status': status,
+                    'Duration': duration,
                     'SIP_Code': row['Final SIP code'],
                     'Brief_Explanation': simple_exp
                 }
@@ -157,13 +182,16 @@ class SIPCodeAnalyzer:
             # Create summary dataframe
             summary_df = pd.DataFrame(summaries)
 
-            # Generate statistics
+            # Generate enhanced statistics
             stats = {
-                'Total Calls': len(data),
-                'Successful Calls': len(data[data['Final SIP code'].astype(str).str.startswith('2')]),
-                'Failed Calls': len(data[data['Final SIP code'].astype(str).str.startswith(('4', '5', '6'))]),
-                'Warning Calls': len(data[data['Final SIP code'].astype(str).str.startswith('3')]),
-                'Info Calls': len(data[data['Final SIP code'].astype(str).str.startswith('1')])
+                'Total Attempted Calls (Duration > 0)': total_attempted_calls,
+                'Successful Calls': successful_calls,
+                'Failed Calls (With Duration)': failed_calls,
+                'Warning Calls (With Duration)': warning_calls,
+                'Info Calls (With Duration)': info_calls,
+                'Average Call Duration (seconds)': round(data['Duration (seconds)'].mean(), 2),  # Updated column name
+                'Max Call Duration (seconds)': round(data['Duration (seconds)'].max(), 2),  # Updated column name
+                'Success Rate (%)': round((successful_calls / total_attempted_calls * 100 if total_attempted_calls > 0 else 0), 2)
             }
             stats_df = pd.DataFrame(list(stats.items()), columns=['Metric', 'Value'])
 
